@@ -55,6 +55,7 @@ Adafruit_STMPE610 ts = Adafruit_STMPE610(STMPE_CS);
 bool _lightPressed = false;
 bool _lightsOn = false;
 uint16_t _brightness = 0;
+int _step = 10;
 
 char *_action_url;
 char *_status_url;
@@ -131,20 +132,13 @@ void loop() {
 
     ts.writeRegister8(STMPE_INT_STA, 0xFF);
 
+    bool interaction = false;
     // Light switch
     if (p.x >= 10 && p.x <= 230 && p.y >= 10 && p.y <= 155) {
       if (!_lightPressed) {
+        Serial.println("Toggle");
         _lightPressed = true;
-        
-        http.begin(_action_url);
-        http.addHeader("Content-Type", "application/json");
-        int httpCode = http.sendRequest("PUT", _lightsOn ? "{\"on\":false}" : "{\"on\":true}");
-
-        if(httpCode <= 0) {
-            Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-        }
-
-        http.end();
+        interaction = true;
       }
     }
     // Low brightness
@@ -154,6 +148,17 @@ void loop() {
         
         if (_brightness > 0) {
           Serial.println("Low");
+
+          _brightness -= _step;
+          if (_brightness < 0) {
+            _brightness = 0;
+          }
+
+          if (_lightsOn) {
+            _lightsOn = false;
+          }
+          
+          interaction = true;
         }
       }
     }
@@ -164,8 +169,39 @@ void loop() {
         
         if (_brightness < 254) {
           Serial.println("High");
+
+          _brightness += _step;
+          if (_brightness > 254) {
+            _brightness = 254;
+          }
+          
+          if (_lightsOn) {
+            _lightsOn = false;
+          }
+          
+          interaction = true;
         }
       }
+    }
+
+    if (interaction) {
+        String message = "{\"on\":";
+        message += (_lightsOn ? "false" : "true");
+        message += ",\"bri\":";
+        message += String(_brightness);
+        message += "}";
+        
+        Serial.print(message);
+        
+        http.begin(_action_url);
+        http.addHeader("Content-Type", "application/json");
+        int httpCode = http.sendRequest("PUT", message);
+
+        if(httpCode <= 0) {
+            Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+        }
+
+        http.end();
     }
   }
   else {
